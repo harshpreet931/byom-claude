@@ -4,6 +4,8 @@ set -euo pipefail
 NORMAL_CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
 THIRD_PARTY_CONFIG="$HOME/Library/Application Support/Claude-3p/claude_desktop_config.json"
 META_JSON="$HOME/Library/Application Support/Claude-3p/configLibrary/_meta.json"
+LAUNCHD_PLIST="$HOME/Library/LaunchAgents/net.juspay.claude-gateway.plist"
+PROXY_PORT=3456
 
 is_running() {
   pgrep -qf "Claude.app/Contents/MacOS/Claude" 2>/dev/null
@@ -20,6 +22,17 @@ quit_claude() {
 }
 
 echo "Resetting Claude Desktop to normal Anthropic mode..."
+
+# Stop and unregister the proxy
+if [[ -f "$LAUNCHD_PLIST" ]]; then
+  launchctl unload "$LAUNCHD_PLIST" 2>/dev/null || true
+  rm -f "$LAUNCHD_PLIST"
+  echo "  ✓ Stopped and removed launchd proxy job"
+else
+  # Plist already gone — kill any process still holding the port
+  pid=$(lsof -nP -iTCP:"$PROXY_PORT" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)
+  [[ -n "$pid" ]] && kill "$pid" 2>/dev/null && echo "  ✓ Killed proxy (pid $pid)" || true
+fi
 
 # Remove deploymentMode from normal config, preserve everything else
 if [[ -f "$NORMAL_CONFIG" ]]; then
